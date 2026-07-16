@@ -13,25 +13,27 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # Устанавливаем системные зависимости для RayLib и Lua
-          sudo apt-get install -y build-essential cmake libasound2-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev liblua5.3-dev
+          # Добавлен libgl1-mesa-dev для исправления ошибки OpenGL и ускорена установка
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake git liblua5.3-dev \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libxcursor-dev libxinerama-dev libgl1-mesa-dev libglu1-mesa-dev
 
       - name: Build and Install RayLib
         run: |
-          # Клонируем и собираем RayLib из исходников (самый надежный способ)
           git clone --depth 1 https://github.com/raysan5/raylib.git
           cd raylib
           mkdir build && cd build
-          cmake -DBUILD_EXAMPLES=OFF ..
-          make
+          # Отключаем всё лишнее для ускорения сборки
+          cmake -DBUILD_EXAMPLES=OFF -DBUILD_GAMES=OFF -DPLATFORM=Desktop ..
+          # -j$(nproc) ускоряет сборку в 2-4 раза, используя все ядра процессора
+          make -j$(nproc)
           sudo make install
-          # Обновляем кэш библиотек
           sudo ldconfig
 
       - name: Compile Game
         run: |
-          # Компилируем игру, линкуя собранный RayLib и Lua
-          # Добавляем необходимые системные флаги для Linux (-lGL -lm -lpthread -ldl -lrt -lX11)
+          # Линкуем игру (добавлены стандартные системные библиотеки для Linux)
           g++ main.cpp -o game -lraylib -llua5.3 -lGL -lm -lpthread -ldl -lrt -lX11
 
       - name: Upload Artifact
