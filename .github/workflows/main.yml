@@ -1,0 +1,26 @@
+name: Build RayLib Lua Game
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libraylib-dev liblua5.3-dev build-essential
+
+      - name: Compile Game
+        run: |
+          g++ main.cpp -o game -lraylib -llua5.3 -ldl -lpthread -lm
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: game-binary
+          path: game
