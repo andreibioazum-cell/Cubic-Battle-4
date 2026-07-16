@@ -4,11 +4,12 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # ИСПРАВЛЕНО: Используем 22.04, так как там есть пакет libraylib-dev
+    runs-on: ubuntu-22.04 
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # Обновили до v4
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
@@ -20,7 +21,7 @@ jobs:
           g++ main.cpp -o game -lraylib -llua5.3 -ldl -lpthread -lm
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4 # ИСПРАВЛЕНО: v3 заменен на v4
+        uses: actions/upload-artifact@v4
         with:
           name: game-binary
           path: game
