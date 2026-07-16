@@ -10,31 +10,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install Dependencies (Turbo)
         run: |
-          sudo apt-get update
-          # Добавлен libgl1-mesa-dev для исправления ошибки OpenGL и ускорена установка
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake git liblua5.3-dev \
-            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
-            libxcursor-dev libxinerama-dev libgl1-mesa-dev libglu1-mesa-dev
+          # Используем флаг -q (quiet) и отключаем очистку кэша для скорости
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake liblua5.3-dev libasound2-dev libx11-dev \
+            libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
 
-      - name: Build and Install RayLib
+      - name: Build RayLib (Fast Parallel)
         run: |
+          # Скачиваем только последнюю версию без истории (depth 1)
           git clone --depth 1 https://github.com/raysan5/raylib.git
-          cd raylib
-          mkdir build && cd build
-          # Отключаем всё лишнее для ускорения сборки
-          cmake -DBUILD_EXAMPLES=OFF -DBUILD_GAMES=OFF -DPLATFORM=Desktop ..
-          # -j$(nproc) ускоряет сборку в 2-4 раза, используя все ядра процессора
+          cd raylib && mkdir build && cd build
+          # Отключаем всё ненужное, включая тесты и примеры
+          cmake -DBUILD_EXAMPLES=OFF -DBUILD_GAMES=OFF -DWITH_PIC=ON ..
           make -j$(nproc)
           sudo make install
           sudo ldconfig
 
       - name: Compile Game
         run: |
-          # Линкуем игру (добавлены стандартные системные библиотеки для Linux)
-          g++ main.cpp -o game -lraylib -llua5.3 -lGL -lm -lpthread -ldl -lrt -lX11
+          # ИСПРАВЛЕНО: Добавлен флаг -I/usr/include/lua5.3, чтобы компилятор нашел lua.h
+          # Добавлен флаг -L/usr/local/lib для поиска собранного RayLib
+          g++ main.cpp -o game \
+            -I/usr/include/lua5.3 \
+            -L/usr/local/lib \
+            -lraylib -llua5.3 -lGL -lm -lpthread -ldl -lrt -lX11
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
