@@ -15,12 +15,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Android SDK Components (NDK & Platform)
+      - name: Install Android SDK Components
         run: |
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "platforms;android-33"
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      - name: Install Build Tools (CMake & Ninja)
+      - name: Install Build Tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build zip
 
       - name: Compile for Multiple ABIs
@@ -29,13 +29,8 @@ jobs:
             echo "Building for $ABI..."
             mkdir -p build_$ABI
             cd build_$ABI
-            cmake .. \
-              -GNinja \
-              -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
-              -DANDROID_ABI=$ABI \
-              -DANDROID_PLATFORM=android-21 \
-              -DPLATFORM=Android \
-              -DCMAKE_BUILD_TYPE=Release
+            cmake .. -GNinja -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-21 -DPLATFORM=Android -DCMAKE_BUILD_TYPE=Release
             ninja
             cd ..
           done
@@ -45,12 +40,8 @@ jobs:
           mkdir -p apk_root/lib/arm64-v8a
           mkdir -p apk_root/lib/armeabi-v7a
           mkdir -p apk_root/assets
-          
-          # Копируем библиотеки
           cp build_arm64-v8a/libCubicBattle.so apk_root/lib/arm64-v8a/
           cp build_armeabi-v7a/libCubicBattle.so apk_root/lib/armeabi-v7a/
-          
-          # Копируем logic.lua (если он есть в корне)
           if [ -f "logic.lua" ]; then cp logic.lua apk_root/assets/; fi
 
       - name: Create Android Manifest
@@ -74,26 +65,18 @@ jobs:
       - name: Package and Sign APK
         run: |
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
-          ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
-          
-          # 1. Создаем базовый APK
-          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml \
-            -I $ANDROID_JAR \
-            -F base.apk apk_root/assets
-            
-          # 2. Добавляем библиотеки в архив
+          # 1. Создаем APK (БЕЗ ассетов внутри aapt, добавим их зипом)
+          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I ${ANDROID_SDK_ROOT}/platforms/android-33/android.jar -F base.apk
+          # 2. Добавляем папки lib и assets в корень архива
           cd apk_root
-          zip -ur ../base.apk lib/
+          zip -ur ../base.apk lib/ assets/
           cd ..
-          
-          # 3. Создаем ключ (Keystore)
+          # 3. Подписываем
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          
-          # 4. Подписываем APK (Исправленные флаги --ks и --ks-pass)
           $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk base.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle-Android
+          name: CubicBattle-Android-Final
           path: CubicBattle.apk
