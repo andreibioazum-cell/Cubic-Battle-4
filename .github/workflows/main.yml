@@ -17,7 +17,6 @@ jobs:
 
       - name: Install Android SDK Components (NDK & Platform)
         run: |
-          # Устанавливаем NDK и платформу 33 (обязательно для сборки)
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "platforms;android-33"
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
@@ -74,7 +73,6 @@ jobs:
 
       - name: Package and Sign APK
         run: |
-          # Находим инструменты сборки и саму платформу
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
           ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
           
@@ -88,9 +86,11 @@ jobs:
           zip -ur ../base.apk lib/
           cd ..
           
-          # 3. Подписываем APK
+          # 3. Создаем ключ (Keystore)
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          $BUILD_TOOLS_DIR/apksigner sign --keystore debug.keystore --storepass android --keypass android --out CubicBattle.apk base.apk
+          
+          # 4. Подписываем APK (Исправленные флаги --ks и --ks-pass)
+          $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk base.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
