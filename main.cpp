@@ -1,6 +1,5 @@
 #include "raylib.h"
-#include <iostream>
-#include <string>
+#include <stddef.h> // Нужно для Lua
 
 extern "C" {
     #include <lua.h>
@@ -8,37 +7,36 @@ extern "C" {
     #include <lauxlib.h>
 }
 
-// Функция для загрузки Lua скрипта из ресурсов (работает на Android и ПК)
+// Безопасная загрузка Lua из ассетов Android
 bool LoadLuaFromAssets(lua_State* L, const char* fileName) {
     int dataSize = 0;
     unsigned char* fileData = LoadFileData(fileName, &dataSize);
-    if (fileData == NULL) return false;
-
-    int result = luaL_loadbuffer(L, (const char*)fileData, dataSize, fileName) || lua_pcall(L, 0, 0, 0);
-    UnloadFileData(fileData);
-
-    if (result != LUA_OK) {
-        TraceLog(LOG_ERROR, "LUA ERROR: %s", lua_tostring(L, -1));
+    
+    if (fileData == NULL) {
+        TraceLog(LOG_ERROR, "LUA: Не удалось найти файл %s", fileName);
         return false;
     }
+
+    if (luaL_loadbuffer(L, (const char*)fileData, dataSize, fileName) || lua_pcall(L, 0, 0, 0)) {
+        TraceLog(LOG_ERROR, "LUA ERROR: %s", lua_tostring(L, -1));
+        UnloadFileData(fileData);
+        return false;
+    }
+
+    UnloadFileData(fileData);
+    TraceLog(LOG_INFO, "LUA: Файл %s успешно загружен", fileName);
     return true;
 }
 
 int main() {
-    const int screenWidth = 800;
-    const int screenHeight = 600;
-
-    // На Android RayLib игнорирует размеры и делает Fullscreen
-    InitWindow(screenWidth, screenHeight, "RayLib + Lua: Rotating 2D Cube");
+    // На Android Raylib сам подстроит разрешение
+    InitWindow(800, 450, "Cubic Battle");
     SetTargetFPS(60);
 
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
 
-    // Загружаем через RayLib-функцию (важно для Android!)
-    if (!LoadLuaFromAssets(L, "logic.lua")) {
-        TraceLog(LOG_ERROR, "Failed to load logic.lua");
-    }
+    bool luaLoaded = LoadLuaFromAssets(L, "logic.lua");
 
     float rotation = 0.0f;
 
@@ -46,28 +44,31 @@ int main() {
         float dt = GetFrameTime();
         rotation += 90.0f * dt;
 
-        lua_getglobal(L, "GetNextColor");
-        lua_pushnumber(L, dt);
-        
-        if (lua_pcall(L, 1, 3, 0) != LUA_OK) {
-            TraceLog(LOG_ERROR, "LUA CALL ERROR: %s", lua_tostring(L, -1));
-        }
+        float r = 1, g = 0, b = 0; // Цвета по умолчанию
 
-        float r = (float)lua_tonumber(L, -3);
-        float g = (float)lua_tonumber(L, -2);
-        float b = (float)lua_tonumber(L, -1);
-        lua_pop(L, 3);
+        if (luaLoaded) {
+            lua_getglobal(L, "GetNextColor");
+            lua_pushnumber(L, dt);
+            if (lua_pcall(L, 1, 3, 0) == LUA_OK) {
+                r = (float)lua_tonumber(L, -3);
+                g = (float)lua_tonumber(L, -2);
+                b = (float)lua_tonumber(L, -1);
+                lua_pop(L, 3);
+            }
+        }
 
         Color cubeColor = { (unsigned char)(r * 255), (unsigned char)(g * 255), (unsigned char)(b * 255), 255 };
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
-
-        Rectangle rec = { GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, 150.0f, 150.0f };
-        Vector2 origin = { 75.0f, 75.0f };
+        
+        float size = GetScreenWidth() / 4.0f;
+        Rectangle rec = { GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, size, size };
+        Vector2 origin = { size / 2.0f, size / 2.0f };
         
         DrawRectanglePro(rec, origin, rotation, cubeColor);
-        DrawText("Logic by Lua, Render by RayLib", 10, 10, 20, DARKGRAY);
+        DrawText("Raylib + Lua Android", 10, 10, 20, MAROON);
+        
         EndDrawing();
     }
 
