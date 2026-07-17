@@ -29,8 +29,13 @@ jobs:
             echo "Building for $ABI..."
             mkdir -p build_$ABI
             cd build_$ABI
-            cmake .. -GNinja -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
-              -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-21 -DPLATFORM=Android -DCMAKE_BUILD_TYPE=Release
+            cmake .. -GNinja \
+              -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=$ABI \
+              -DANDROID_PLATFORM=android-21 \
+              -DPLATFORM=Android \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DANDROID_STL=c++_static
             ninja
             cd ..
           done
@@ -40,18 +45,29 @@ jobs:
           mkdir -p apk_root/lib/arm64-v8a
           mkdir -p apk_root/lib/armeabi-v7a
           mkdir -p apk_root/assets
+          
+          # Копируем библиотеки (ВАЖНО: имя CubicBattle должно совпадать с манифестом)
           cp build_arm64-v8a/libCubicBattle.so apk_root/lib/arm64-v8a/
           cp build_armeabi-v7a/libCubicBattle.so apk_root/lib/armeabi-v7a/
+          
           if [ -f "logic.lua" ]; then cp logic.lua apk_root/assets/; fi
 
       - name: Create Android Manifest
         run: |
           cat <<EOF > apk_root/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.cubic.battle" android:versionCode="1" android:versionName="1.0">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" 
+              package="com.cubic.battle" 
+              android:versionCode="1" 
+              android:versionName="1.0">
+              
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
-              <application android:label="CubicBattle" android:hasCode="false">
-                  <activity android:name="android.app.NativeActivity" android:configChanges="orientation|keyboardHidden|screenSize" android:exported="true">
+              
+              <application android:label="CubicBattle" android:hasCode="false" android:extractNativeLibs="true">
+                  <activity android:name="android.app.NativeActivity" 
+                      android:configChanges="orientation|keyboardHidden|screenSize" 
+                      android:exported="true"
+                      android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
                       <meta-data android:name="android.app.lib_name" android:value="CubicBattle" />
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -65,18 +81,28 @@ jobs:
       - name: Package and Sign APK
         run: |
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
-          # 1. Создаем APK (БЕЗ ассетов внутри aapt, добавим их зипом)
-          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I ${ANDROID_SDK_ROOT}/platforms/android-33/android.jar -F base.apk
-          # 2. Добавляем папки lib и assets в корень архива
+          ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
+          
+          # 1. Создаем пустой APK
+          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I $ANDROID_JAR -F CubicBattle-unsigned.apk
+          
+          # 2. Добавляем ассеты
           cd apk_root
-          zip -ur ../base.apk lib/ assets/
+          zip -g ../CubicBattle-unsigned.apk assets/logic.lua || true
+          
+          # 3. Добавляем библиотеки БЕЗ СЖАТИЯ (флаг -0), это критично для Android 10+
+          zip -g -r -0 ../CubicBattle-unsigned.apk lib/
           cd ..
-          # 3. Подписываем
+          
+          # 4. Выравнивание (Zipalign)
+          $BUILD_TOOLS_DIR/zipalign -v 4 CubicBattle-unsigned.apk CubicBattle-aligned.apk
+          
+          # 5. Подпись
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk base.apk
+          $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk CubicBattle-aligned.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle-Android-Final
+          name: CubicBattle-Final
           path: CubicBattle.apk
