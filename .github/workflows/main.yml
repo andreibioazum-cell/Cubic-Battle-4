@@ -1,4 +1,4 @@
- name: Build Universal Android APK
+name: Build Universal Android APK
 
 on: [push, pull_request]
 
@@ -25,7 +25,6 @@ jobs:
 
       - name: Compile for Multiple ABIs
         run: |
-          # Собираем под arm64 (новые) и armeabi-v7a (старые)
           for ABI in arm64-v8a armeabi-v7a; do
             echo "Building for $ABI..."
             mkdir -p build_$ABI
