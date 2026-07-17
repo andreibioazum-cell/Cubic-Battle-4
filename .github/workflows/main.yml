@@ -1,9 +1,9 @@
-name: Build Android APK
+name: Build Universal Android APK
 
 on: [push, pull_request]
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -15,34 +15,92 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Android NDK 25
+      - name: Install Android NDK r25
         run: |
-          # Устанавливаем конкретную версию NDK через sdkmanager
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      - name: Install Build Tools (Ninja)
+      - name: Install Build Tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
-      - name: Build with CMake (Android ARM64)
+      # Сборка под 3 основные архитектуры
+      - name: Compile for Multiple ABIs
         run: |
-          mkdir build
-          cd build
-          # Используем установленный NDK 25
-          cmake .. \
-            -GNinja \
-            -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-21 \
-            -DPLATFORM=Android \
-            -DCMAKE_BUILD_TYPE=Release
-          ninja
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            echo "Building for $ABI..."
+            mkdir -p build_$ABI
+            cd build_$ABI
+            cmake .. \
+              -GNinja \
+              -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=$ABI \
+              -DANDROID_PLATFORM=android-21 \
+              -DPLATFORM=Android \
+              -DCMAKE_BUILD_TYPE=Release
+            ninja
+            cd ..
+          done
 
-      - name: Check Build Output
-        run: ls -R build/
+      - name: Prepare APK Structure
+        run: |
+          mkdir -p apk_root/lib/arm64-v8a
+          mkdir -p apk_root/lib/armeabi-v7a
+          mkdir -p apk_root/lib/x86_64
+          mkdir -p apk_root/assets
+          
+          # Копируем библиотеки (название должно совпадать с тем, что в манифесте)
+          cp build_arm64-v8a/libCubicBattle.so apk_root/lib/arm64-v8a/
+          cp build_armeabi-v7a/libCubicBattle.so apk_root/lib/armeabi-v7a/
+          cp build_x86_64/libCubicBattle.so apk_root/lib/x86_64/
+          
+          # Копируем ресурсы
+          cp logic.lua apk_root/assets/ || echo "No logic.lua found"
 
-      - name: Upload Binary
+      - name: Create Android Manifest
+        run: |
+          cat <<EOF > apk_root/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.cubic.battle" android:versionCode="1" android:versionName="1.0">
+              <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
+              <application android:label="CubicBattle" android:hasCode="false" android:extractNativeLibs="true">
+                  <activity android:name="android.app.NativeActivity" android:configChanges="orientation|keyboardHidden|screenSize" android:exported="true">
+                      <meta-data android:name="android.app.lib_name" android:value="CubicBattle" />
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Package APK
+        run: |
+          # Ищем инструменты сборки
+          BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
+          
+          # 1. Компилируем ресурсы и манифест
+          $BUILD_TOOLS_DIR/aapt2 link -o base.apk \
+            -I ${ANDROID_SDK_ROOT}/platforms/android-33/android.jar \
+            --manifest apk_root/AndroidManifest.xml \
+            --v2-signing-enabled
+
+          # 2. Добавляем библиотеки и ассеты в архив
+          cd apk_root
+          zip -ur ../base.apk lib/* assets/*
+          cd ..
+
+      - name: Sign APK
+        run: |
+          BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
+          # Создаем временный ключ для подписи
+          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          
+          # Подписываем
+          $BUILD_TOOLS_DIR/apksigner sign --keystore debug.keystore --storepass android --keypass android --out CubicBattle.apk base.apk
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: cubic-battle-android-binary
-          path: build/CubicBattle*
+          name: CubicBattle-Universal-APK
+          path: CubicBattle.apk
