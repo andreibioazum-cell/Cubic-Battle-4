@@ -45,8 +45,12 @@ jobs:
           mkdir -p apk_root/lib/arm64-v8a
           mkdir -p apk_root/lib/armeabi-v7a
           mkdir -p apk_root/assets
+          
+          # Копируем библиотеки
           cp build_arm64-v8a/libCubicBattle.so apk_root/lib/arm64-v8a/
           cp build_armeabi-v7a/libCubicBattle.so apk_root/lib/armeabi-v7a/
+          
+          # Копируем logic.lua
           if [ -f "logic.lua" ]; then cp logic.lua apk_root/assets/; fi
 
       - name: Create Android Manifest
@@ -58,9 +62,9 @@ jobs:
               android:versionCode="1" 
               android:versionName="1.0">
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
-              <application android:label="CubicBattle4" android:hasCode="false" android:extractNativeLibs="true" android:enableOnBackInvokedCallback="true">
+              <application android:label="CubicBattle4" android:hasCode="false" android:extractNativeLibs="true">
                   <activity android:name="android.app.NativeActivity" 
-                      android:configChanges="orientation|keyboardHidden|screenSize" 
+                      android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize" 
                       android:exported="true"
                       android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
                       <meta-data android:name="android.app.lib_name" android:value="CubicBattle" />
@@ -76,12 +80,22 @@ jobs:
       - name: Package and Sign APK
         run: |
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
-          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I ${ANDROID_SDK_ROOT}/platforms/android-33/android.jar -F CubicBattle-unsigned.apk
+          ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
+          
+          # 1. Создаем APK с манифестом
+          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I $ANDROID_JAR -F CubicBattle-unsigned.apk
+          
+          # 2. Переходим в корень структуры и добавляем файлы
+          # Это гарантирует, что внутри APK пути будут lib/... и assets/...
           cd apk_root
-          zip -g ../CubicBattle-unsigned.apk assets/logic.lua || true
+          zip -g -r ../CubicBattle-unsigned.apk assets/
           zip -g -r -0 ../CubicBattle-unsigned.apk lib/
           cd ..
+          
+          # 3. Выравнивание (ОБЯЗАТЕЛЬНО)
           $BUILD_TOOLS_DIR/zipalign -v 4 CubicBattle-unsigned.apk CubicBattle-aligned.apk
+          
+          # 4. Подпись
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk CubicBattle-aligned.apk
 
