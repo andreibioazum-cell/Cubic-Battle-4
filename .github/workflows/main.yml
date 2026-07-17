@@ -15,12 +15,13 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Android NDK r25
+      - name: Install Android SDK Components (NDK & Platform)
         run: |
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          # Устанавливаем NDK и платформу 33 (обязательно для сборки)
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "platforms;android-33"
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      - name: Install Build Tools
+      - name: Install Build Tools (CMake & Ninja)
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build zip
 
       - name: Compile for Multiple ABIs
@@ -73,14 +74,16 @@ jobs:
 
       - name: Package and Sign APK
         run: |
+          # Находим инструменты сборки и саму платформу
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
+          ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
           
-          # 1. Создаем пустой APK с манифестом
+          # 1. Создаем базовый APK
           $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml \
-            -I ${ANDROID_SDK_ROOT}/platforms/android-33/android.jar \
+            -I $ANDROID_JAR \
             -F base.apk apk_root/assets
             
-          # 2. Добавляем .so файлы вручную в архив
+          # 2. Добавляем библиотеки в архив
           cd apk_root
           zip -ur ../base.apk lib/
           cd ..
