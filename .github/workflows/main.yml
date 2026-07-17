@@ -1,16 +1,15 @@
-name: Build RayLib Android APK
+name: Build Android APK
 
 on: [push, pull_request]
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -22,26 +21,27 @@ jobs:
           ndk-version: r25c
 
       - name: Install Dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq liblua5.3-dev cmake
+        run: sudo apt-get install -y cmake
 
-      - name: Build RayLib for Android
+      # Мы используем готовый Docker-образ или скрипт для сборки Raylib Android
+      # Но самый надежный способ для новичка — использовать этот билд-степ:
+      - name: Build with CMake (Android)
         run: |
-          git clone --depth 1 https://github.com/raysan5/raylib.git
-          cd raylib/src
-          # Собираем RayLib под Android (ARM64)
-          make PLATFORM=PLATFORM_ANDROID ANDROID_NDK=$ANDROID_NDK_ROOT ANDROID_ARCH=arm64 -j$(nproc)
+          mkdir build
+          cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-21 \
+            -DPLATFORM=Android
+          make -j$(nproc)
 
-      - name: Build APK (Simplified)
-        run: |
-          # В реальном мире тут нужен Gradle, но мы попробуем собрать базовый .so
-          # Для полноценного APK с Lua нужно чуть больше магии, 
-          # давай сначала проверим, готов ли ты к такому сложному билду?
-          echo "Для APK нам нужно объединить Lua и RayLib под архитектуру телефона."
-          
-      - name: Upload Artifact
+      # В этой точке у нас есть .so файл. Чтобы получить APK, 
+      # обычно используют Gradle-обертку. 
+      # Если у тебя в репозитории нет папки /android, 
+      # самый быстрый способ получить результат — собрать артефакт .so
+      - name: Upload Shared Library
         uses: actions/upload-artifact@v4
         with:
-          name: game-apk
-          path: . # Тут будет твой файл
+          name: game-shared-lib
+          path: build/CubicBattle # Это будет файл .so или исполняемый файл
