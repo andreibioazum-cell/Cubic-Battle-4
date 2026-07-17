@@ -15,34 +15,33 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Используем предустановленный NDK. На текущий момент версия 25.2.9519653 стабильна.
-      - name: Setup Android NDK Path
+      # Устанавливаем инструменты сборки (Ninja быстрее и надежнее для Android)
+      - name: Install Build Tools
         run: |
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> $GITHUB_ENV
-          echo "NDK_PATH=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
 
-      - name: Install CMake
-        run: sudo apt-get update && sudo apt-get install -y cmake
-
+      # Самый надежный способ найти NDK на GitHub Actions — использовать переменную ANDROID_NDK_LATEST_HOME
       - name: Build with CMake (Android ARM64)
         run: |
           mkdir build
           cd build
-          # Мы передаем путь к NDK в CMake, чтобы он знал, как собирать под телефон
           cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -GNinja \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-21 \
-            -DPLATFORM=Android
-          make -j$(nproc)
+            -DPLATFORM=Android \
+            -DCMAKE_BUILD_TYPE=Release
+          ninja
 
-      # На данном этапе CMake соберет файл (библиотеку), но не .apk архив.
-      # Чтобы превратить это в APK, нам нужны инструменты сборки Android.
-      - name: Check output
-        run: ls -R build/
+      - name: Check Build Output
+        run: |
+          echo "Содержимое папки build после сборки:"
+          ls -R build/
 
-      - name: Upload Build Results
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-build-files
-          path: build/
+          name: android-binary
+          path: build/CubicBattle* 
