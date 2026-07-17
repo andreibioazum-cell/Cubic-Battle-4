@@ -9,39 +9,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android NDK
-        uses: nndk/nndk@v1
-        with:
-          ndk-version: r25c
+      # Используем предустановленный NDK. На текущий момент версия 25.2.9519653 стабильна.
+      - name: Setup Android NDK Path
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "NDK_PATH=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      - name: Install Dependencies
-        run: sudo apt-get install -y cmake
+      - name: Install CMake
+        run: sudo apt-get update && sudo apt-get install -y cmake
 
-      # Мы используем готовый Docker-образ или скрипт для сборки Raylib Android
-      # Но самый надежный способ для новичка — использовать этот билд-степ:
-      - name: Build with CMake (Android)
+      - name: Build with CMake (Android ARM64)
         run: |
           mkdir build
           cd build
+          # Мы передаем путь к NDK в CMake, чтобы он знал, как собирать под телефон
           cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-21 \
             -DPLATFORM=Android
           make -j$(nproc)
 
-      # В этой точке у нас есть .so файл. Чтобы получить APK, 
-      # обычно используют Gradle-обертку. 
-      # Если у тебя в репозитории нет папки /android, 
-      # самый быстрый способ получить результат — собрать артефакт .so
-      - name: Upload Shared Library
+      # На данном этапе CMake соберет файл (библиотеку), но не .apk архив.
+      # Чтобы превратить это в APK, нам нужны инструменты сборки Android.
+      - name: Check output
+        run: ls -R build/
+
+      - name: Upload Build Results
         uses: actions/upload-artifact@v4
         with:
-          name: game-shared-lib
-          path: build/CubicBattle # Это будет файл .so или исполняемый файл
+          name: android-build-files
+          path: build/
