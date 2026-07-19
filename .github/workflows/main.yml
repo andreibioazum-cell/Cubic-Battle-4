@@ -33,9 +33,8 @@ jobs:
               -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake \
               -DANDROID_ABI=$ABI \
               -DANDROID_PLATFORM=android-21 \
-              -DPLATFORM=Android \
               -DCMAKE_BUILD_TYPE=Release \
-              -DANDROID_STL=c++_static
+              -DPLATFORM=Android # ПЕРЕДАЕМ ПЛАТФОРМУ В CMAKE
             ninja
             cd ..
           done
@@ -52,13 +51,13 @@ jobs:
           cat <<EOF > apk_root/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android" 
-              package="com.cubic.cpp.only" 
+              package="com.cubic.battle.final" 
               android:versionCode="1" 
               android:versionName="1.0">
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
-              <application android:label="CubicCPP" android:hasCode="false" android:extractNativeLibs="true">
+              <application android:label="CubicBattle" android:hasCode="false" android:extractNativeLibs="true">
                   <activity android:name="android.app.NativeActivity" 
-                      android:configChanges="orientation|keyboardHidden|screenSize|screenLayout" 
+                      android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize" 
                       android:exported="true"
                       android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
                       <meta-data android:name="android.app.lib_name" android:value="CubicBattle" />
@@ -75,24 +74,14 @@ jobs:
         run: |
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
           ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
-          
-          # 1. Сборка базы
-          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I $ANDROID_JAR -F CubicBattle-unsigned.apk
-          
-          # 2. Добавление библиотек без сжатия
-          cd apk_root
-          zip -g -r -0 ../CubicBattle-unsigned.apk lib/
-          cd ..
-          
-          # 3. Выравнивание
-          $BUILD_TOOLS_DIR/zipalign -v 4 CubicBattle-unsigned.apk CubicBattle-aligned.apk
-          
-          # 4. Подпись
+          $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I $ANDROID_JAR -F base.apk
+          cd apk_root && zip -g -r -0 ../base.apk lib/ && cd ..
+          $BUILD_TOOLS_DIR/zipalign -v 4 base.apk CubicBattle-aligned.apk
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --out CubicBattle.apk CubicBattle-aligned.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle-CPP-Only
+          name: CubicBattle-Final
           path: CubicBattle.apk
