@@ -44,27 +44,21 @@ jobs:
         run: |
           mkdir -p apk_root/lib/arm64-v8a
           mkdir -p apk_root/lib/armeabi-v7a
-          mkdir -p apk_root/assets
-          
-          # Копируем библиотеки
           cp build_arm64-v8a/libCubicBattle.so apk_root/lib/arm64-v8a/
           cp build_armeabi-v7a/libCubicBattle.so apk_root/lib/armeabi-v7a/
-          
-          # Копируем logic.lua
-          if [ -f "logic.lua" ]; then cp logic.lua apk_root/assets/; fi
 
       - name: Create Android Manifest
         run: |
           cat <<EOF > apk_root/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android" 
-              package="com.cubicbattle4.game" 
+              package="com.cubic.cpp.only" 
               android:versionCode="1" 
               android:versionName="1.0">
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
-              <application android:label="CubicBattle4" android:hasCode="false" android:extractNativeLibs="true">
+              <application android:label="CubicCPP" android:hasCode="false" android:extractNativeLibs="true">
                   <activity android:name="android.app.NativeActivity" 
-                      android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize" 
+                      android:configChanges="orientation|keyboardHidden|screenSize|screenLayout" 
                       android:exported="true"
                       android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
                       <meta-data android:name="android.app.lib_name" android:value="CubicBattle" />
@@ -82,17 +76,15 @@ jobs:
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_SDK_ROOT}/build-tools/* | tail -1)
           ANDROID_JAR=${ANDROID_SDK_ROOT}/platforms/android-33/android.jar
           
-          # 1. Создаем APK с манифестом
+          # 1. Сборка базы
           $BUILD_TOOLS_DIR/aapt package -f -M apk_root/AndroidManifest.xml -I $ANDROID_JAR -F CubicBattle-unsigned.apk
           
-          # 2. Переходим в корень структуры и добавляем файлы
-          # Это гарантирует, что внутри APK пути будут lib/... и assets/...
+          # 2. Добавление библиотек без сжатия
           cd apk_root
-          zip -g -r ../CubicBattle-unsigned.apk assets/
           zip -g -r -0 ../CubicBattle-unsigned.apk lib/
           cd ..
           
-          # 3. Выравнивание (ОБЯЗАТЕЛЬНО)
+          # 3. Выравнивание
           $BUILD_TOOLS_DIR/zipalign -v 4 CubicBattle-unsigned.apk CubicBattle-aligned.apk
           
           # 4. Подпись
@@ -102,5 +94,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CubicBattle-Final
+          name: CubicBattle-CPP-Only
           path: CubicBattle.apk
