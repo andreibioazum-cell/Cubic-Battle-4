@@ -1,34 +1,34 @@
 #include "raylib.h"
 
 int main() {
-    // Инициализация окна. 0, 0 автоматически подстроится под экран телефона
-    InitWindow(0, 0, "RayLib Android - C++ Only");
+    // На Android InitWindow игнорирует цифры и берет весь экран
+    InitWindow(0, 0, "CubicBattle");
+    
+    // Ждем, пока RayLib действительно создаст контекст (важно для Android)
+    while (!IsWindowReady()) {
+        if (WindowShouldClose()) return 0;
+    }
+
     SetTargetFPS(60);
 
     float rotation = 0.0f;
 
-    // Главный цикл
     while (!WindowShouldClose()) {
-        // Логика
-        float dt = GetFrameTime();
-        rotation += 90.0f * dt;
+        rotation += 90.0f * GetFrameTime();
 
-        // Рисование
         BeginDrawing();
-            ClearBackground(RAYWHITE);
+            ClearBackground(BLACK);
             
-            int screenW = GetScreenWidth();
-            int screenH = GetScreenHeight();
-            float cubeSize = screenW / 3.0f;
+            float size = GetScreenWidth() / 3.0f;
+            DrawRectanglePro(
+                { GetScreenWidth()/2.0f, GetScreenHeight()/2.0f, size, size },
+                { size/2.0f, size/2.0f },
+                rotation,
+                MAROON
+            );
             
-            // Рисуем квадрат в центре
-            Rectangle rec = { screenW / 2.0f, screenH / 2.0f, cubeSize, cubeSize };
-            Vector2 origin = { cubeSize / 2.0f, cubeSize / 2.0f };
-            
-            DrawRectanglePro(rec, origin, rotation, MAROON);
-            
-            DrawText("RayLib C++ is Running!", 20, 20, 20, DARKGRAY);
-            DrawFPS(20, screenH - 40);
+            DrawText("RayLib Android: SUCCESS", 20, 20, 30, GREEN);
+            DrawFPS(20, GetScreenHeight() - 50);
         EndDrawing();
     }
 
